@@ -31,18 +31,24 @@ defmodule OMG.Watcher.ExitProcessor.InFlightExitInfo do
     :priority,
     # piggybacking
     :exit_map,
-    :oldest_competitor = 0,
-    :is_canonical = true
+    oldest_competitor: 0,
+    is_canonical: true
   ]
 
   @type t :: %__MODULE__{
-          inputs: [Utxo.t()],
+          inputs: [{Utxo.t(), Utxo.Position.t()}],
           outputs: [Utxo.t()],
           signatures: [binary()],
           timestamp: pos_integer(),
           priority: non_neg_integer(),
-          exit_map: non_neg_integer(),
+          exit_map: binary(),
           oldest_competitor: non_neg_integer(),
           is_canonical: boolean()
         }
+
+  def get_exit_id_from_tx_hash(tx_hash) when is_binary(tx_hash) and byte_size(tx_hash) == 32 do
+    # cut the oldest 8 bytes and shift left by one bit (least significant bit is set to 0)
+    <<_::65, ife_id::bitstring-size(192)>> = <<tx_hash::bitstring, <<0::1>>::bitstring>>
+    ife_id
+  end
 end
