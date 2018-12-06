@@ -19,26 +19,23 @@ defmodule OMG.Watcher.ExitProcessor.InFlightExitInfo do
   Internal stuff of `OMG.Watcher.ExitProcessor`
   """
 
-  alias OMG.API.Crypto
-  alias OMG.API.Utxo
+  alias OMG.API.Utxo;
 
   # mapped by :in_flight_exit_id
   defstruct [
-    :inputs,
-    :outputs,
-    :signatures,
+    :tx,
     :timestamp,
     :priority,
     # piggybacking
     :exit_map,
+    tx_pos: nil,
     oldest_competitor: 0,
     is_canonical: true
   ]
 
   @type t :: %__MODULE__{
-          inputs: [{Utxo.t(), Utxo.Position.t()}],
-          outputs: [Utxo.t()],
-          signatures: [binary()],
+          tx: Transaction.Signed.t(),
+          tx_pos: Utxo.Position.t(),
           timestamp: pos_integer(),
           priority: non_neg_integer(),
           exit_map: binary(),
