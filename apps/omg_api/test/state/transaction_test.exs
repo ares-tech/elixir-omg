@@ -235,4 +235,11 @@ defmodule OMG.API.State.TransactionTest do
     {:error, :unauthorized_spent} =
       Transaction.Recovered.all_spenders_authorized?(authorized_tx, [alice.addr, carol.addr])
   end
+
+  @tag fixtures: [:transaction]
+  test "Decode transaction", %{transaction: tx} do
+    {:ok, decoded, []} = tx |> Transaction.encode() |> Transaction.decode()
+    assert decoded == tx
+  end
+
 end
