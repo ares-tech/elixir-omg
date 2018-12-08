@@ -107,6 +107,17 @@ defmodule OMG.DB.LevelDBServer do
     {:reply, result, state}
   end
 
+  def handle_call({:in_flight_exits_info}, _from, %__MODULE__{db_ref: db_ref} = state) do
+    result =
+      db_ref
+      |> Exleveldb.stream()
+      |> LevelDBCore.filter_in_flight_exits_info()
+      |> Enum.map(fn {_, value} -> {:ok, value} end)
+      |> LevelDBCore.decode_values(:in_flight_exit_info)
+
+    {:reply, {:ok, []}, state}
+  end
+
   def handle_call(parameter, _from, %__MODULE__{db_ref: db_ref} = state)
       when is_atom(parameter) do
     result =
