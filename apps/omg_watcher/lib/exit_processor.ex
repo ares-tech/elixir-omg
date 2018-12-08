@@ -46,8 +46,8 @@ defmodule OMG.Watcher.ExitProcessor do
   Accepts events and processes them in the state - new in flight exits are tracked.
   Returns `db_updates` due and relies on the caller to do persistence
   """
-  def new_in_flight_exits(exits) do
-    GenServer.call(__MODULE__, {:new_in_flight_exits, exits})
+  def new_in_flight_exits(in_flight_exit_started_events) do
+    GenServer.call(__MODULE__, {:new_in_flight_exits, in_flight_exit_started_events})
   end
 
   @doc """
@@ -88,13 +88,13 @@ defmodule OMG.Watcher.ExitProcessor do
 
   def init(:ok) do
     {:ok, db_exits} = DB.exit_infos()
-
+    {:ok, db_ifes} = DB.in_flight_exits_info()
     sla_margin = Application.fetch_env!(:omg_watcher, :exit_processor_sla_margin)
     interval = Application.fetch_env!(:omg_watcher, :exit_processor_validation_interval_ms)
 
     {:ok, _} = :timer.send_interval(interval, self(), :check_validity)
 
-    Core.init(db_exits, sla_margin)
+    Core.init(db_exits, db_ifes, sla_margin)
   end
 
   def handle_call({:new_exits, exits}, _from, state) do
@@ -110,19 +110,8 @@ defmodule OMG.Watcher.ExitProcessor do
     {:reply, {:ok, db_updates}, new_state}
   end
 
-  def handle_call({:new_in_flight_exits, exits}, _from, state) do
-    in_flight_exits_contract_data =
-      Enum.map(exits, fn %{tx_hash: hash} ->
-        {:ok, ife_contract_data} =
-          hash
-          |> InFlightExitInfo.get_exit_id_from_tx_hash()
-          |> Eth.RootChain.get_in_flight_exit()
-
-        # TODO: read tx_data
-        ife_contract_data
-      end)
-
-    {new_state, db_updates} = Core.new_in_flight_exits(state, exits, in_flight_exits_contract_data)
+  def handle_call({:new_in_flight_exits, events}, _from, state) do
+    {new_state, db_updates} = Core.new_in_flight_exits(state, events)
     {:reply, {:ok, db_updates}, new_state}
   end
 
@@ -145,11 +134,8 @@ defmodule OMG.Watcher.ExitProcessor do
     {:reply, chain_status, state}
   end
 
-  def handle_call({:get_ifes, []}, _from, state),
-      do: {:reply, state.in_flight_exits, state}
-
   def handle_call({:get_ifes, hashes}, _from, state),
-      do: {:reply, Map.take(state.in_flight_exits, hashes), state}
+    do: {:reply, Core.get_in_flight_exits(hashes), state}
 
   def handle_info(:check_validity, state) do
     _ = check_validity(state)

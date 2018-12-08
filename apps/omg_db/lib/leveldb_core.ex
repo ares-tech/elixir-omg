@@ -43,7 +43,7 @@ defmodule OMG.DB.LevelDBCore do
   end
 
   @doc """
-  Interprepts the response from leveldb and returns a success-decorated result
+  Interprets the response from leveldb and returns a success-decorated result
   """
   def decode_value(db_response, type) do
     case decode_response(type, db_response) do
@@ -84,6 +84,14 @@ defmodule OMG.DB.LevelDBCore do
     end)
   end
 
+  def filter_in_flight_exits_info(keys_stream) do
+    keys_stream
+    |> Stream.filter(fn
+      {"ife" <> _rest, _} -> true
+      _ -> false
+    end)
+  end
+
   def key(:block, %{hash: hash} = _block), do: key(:block, hash)
   def key(:block, hash), do: "b" <> hash
 
@@ -103,6 +111,10 @@ defmodule OMG.DB.LevelDBCore do
 
   def key(:exit_info, position) do
     "e" <> :erlang.term_to_binary(position)
+  end
+
+  def key(:in_flight_exit_info, position) do
+    "ife" <> :erlang.term_to_binary(position)
   end
 
   @single_value_parameter_names [

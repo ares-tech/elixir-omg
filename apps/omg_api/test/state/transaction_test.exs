@@ -241,5 +241,4 @@ defmodule OMG.API.State.TransactionTest do
     {:ok, decoded, []} = tx |> Transaction.encode() |> Transaction.decode()
     assert decoded == tx
   end
-
 end
