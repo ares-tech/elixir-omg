@@ -64,7 +64,7 @@ defmodule OMG.DB.LevelDBCore do
   end
 
   @doc """
-  Interprets an enumberable of responses from leveldb and decorates the enumerable with a `{:ok, _enumberable}`
+  Interprets an enumerable of responses from leveldb and decorates the enumerable with a `{:ok, _enumerable}`
   if no errors occurred
   """
   def decode_values(encoded_enumerable, type) do
