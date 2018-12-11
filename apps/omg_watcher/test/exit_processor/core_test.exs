@@ -320,5 +320,4 @@ defmodule OMG.Watcher.ExitProcessor.CoreTest do
 
     {:ok, ^final_state} = Core.init([], ifes)
   end
-
 end
