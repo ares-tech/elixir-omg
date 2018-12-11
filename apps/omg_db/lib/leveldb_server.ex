@@ -102,7 +102,7 @@ defmodule OMG.DB.LevelDBServer do
 
   def handle_call({:competitors_info}, _from, %__MODULE__{db_ref: db_ref} = state) do
     result  = get_by_type(:competitor_info, db_ref)
-    {:reply, result, state}
+    {:reply, {:ok, result}, state}
   end
 
   def handle_call(parameter, _from, %__MODULE__{db_ref: db_ref} = state)
