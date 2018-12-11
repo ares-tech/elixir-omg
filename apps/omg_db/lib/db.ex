@@ -61,6 +61,15 @@ defmodule OMG.DB do
     GenServer.call(server_name, {:in_flight_exits_info}, @one_minute)
   end
 
+  def competitors_info(server_name \\ @server_name) do
+    _ =
+      Logger.info(fn ->
+        "Reading competitors' info, this might take a while. Allowing #{inspect(@one_minute)} ms"
+      end)
+
+    GenServer.call(server_name, {:competitors_info}, @one_minute)
+  end
+
   def block_hashes(block_numbers_to_fetch, server_name \\ @server_name) do
     GenServer.call(server_name, {:block_hashes, block_numbers_to_fetch})
   end
