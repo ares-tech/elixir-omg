@@ -28,7 +28,7 @@ defmodule OMG.Watcher.ExitProcessor.InFlightExitInfo do
     :tx_pos,
     :timestamp,
     # piggybacking
-    exit_map: <<0::16>>,
+    exit_map: 0..7 |> Enum.map(&{&1, %{is_piggybacked: false, is_finalized: false}}) |> Map.new(),
     oldest_competitor: 0,
     is_canonical: true
   ]
@@ -37,7 +37,7 @@ defmodule OMG.Watcher.ExitProcessor.InFlightExitInfo do
           tx: Transaction.Signed.t(),
           tx_pos: Utxo.Position.t(),
           timestamp: non_neg_integer(),
-          exit_map: binary(),
+          exit_map: %{non_neg_integer() => %{is_piggybacked: boolean(), is_finalized: boolean()}},
           oldest_competitor: non_neg_integer(),
           is_canonical: boolean()
         }
