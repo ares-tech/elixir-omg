@@ -49,6 +49,10 @@ defmodule OMG.Watcher.Integration.TestHelper do
     decode16(data, ["txbytes", "proof", "sigs"])
   end
 
+  def assert_block_getter_down do
+    :ok = wait_for_process(Process.whereis(OMG.Watcher.BlockGetter))
+  end
+
   def wait_for_current_block_fetch(timeout) do
     {:ok, current_child_block} = Eth.RootChain.get_current_child_block()
     wait_for_block_fetch(current_child_block, timeout)
