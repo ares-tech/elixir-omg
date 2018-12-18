@@ -66,6 +66,7 @@ defmodule OMG.DB.LevelDBCore do
       else: {:ok, raw_decoded}
   end
 
+  defp encode_value(:spend, {_position, blknum}), do: :erlang.term_to_binary(blknum)
   defp encode_value(_type, value), do: :erlang.term_to_binary(value)
 
   def filter_utxos(keys_stream) do
@@ -97,6 +98,7 @@ defmodule OMG.DB.LevelDBCore do
     "u" <> :erlang.term_to_binary(position)
   end
 
+  def key(:spend, {position, _blknum}), do: key(:spend, position)
   def key(:spend, position), do: "s" <> :erlang.term_to_binary(position)
 
   def key(:exit_info, {position, _exit_info}) do
