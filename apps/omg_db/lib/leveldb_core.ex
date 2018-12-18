@@ -97,6 +97,8 @@ defmodule OMG.DB.LevelDBCore do
     "u" <> :erlang.term_to_binary(position)
   end
 
+  def key(:spend, position), do: "s" <> :erlang.term_to_binary(position)
+
   def key(:exit_info, {position, _exit_info}) do
     key(:utxo, position)
   end
