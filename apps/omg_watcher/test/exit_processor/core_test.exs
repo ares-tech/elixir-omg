@@ -27,6 +27,8 @@ defmodule OMG.Watcher.ExitProcessor.CoreTest do
   alias OMG.Watcher.Eventer
   alias OMG.Watcher.Eventer.Event
   alias OMG.Watcher.ExitProcessor.Core
+  alias OMG.Watcher.ExitProcessor.InFlightExitInfo
+  alias OMG.Watcher.ExitProcessor.CompetitorInfo
 
   require Utxo
 
@@ -75,6 +77,11 @@ defmodule OMG.Watcher.ExitProcessor.CoreTest do
   @utxo_pos1 Utxo.position(1, 0, 0)
   @utxo_pos2 Utxo.Position.decode(10_000_000_001)
 
+  defp not_included_competitor_pos do
+    <<long::256>> = List.duplicate(<<255::8>>, 32) |> Enum.reduce(fn val, acc -> val <> acc end)
+    long
+  end
+
   deffixture transactions() do
     [
       %Transaction{
@@ -94,8 +101,27 @@ defmodule OMG.Watcher.ExitProcessor.CoreTest do
     ]
   end
 
+  deffixture competing_transactions() do
+    [
+      %Transaction{
+        inputs: [%{blknum: 1, txindex: 1, oindex: 0}, %{blknum: 10, txindex: 2, oindex: 1}],
+        outputs: [
+          %{owner: "malorymalorymaloryma", currency: @eth, amount: 2},
+          %{owner: "carolcarolcarolcarol", currency: @eth, amount: 1}
+        ]
+      },
+      %Transaction{
+        inputs: [%{blknum: 20, txindex: 1, oindex: 0}, %{blknum: 2, txindex: 2, oindex: 1}],
+        outputs: [
+          %{owner: "malorymalorymaloryma", currency: @eth, amount: 2},
+          %{owner: "carolcarolcarolcarol", currency: @eth, amount: 1}
+        ]
+      }
+    ]
+  end
+
   deffixture processor_empty() do
-    {:ok, empty} = Core.init([], [])
+    {:ok, empty} = Core.init([], [], [])
     empty
   end
 
@@ -136,6 +162,32 @@ defmodule OMG.Watcher.ExitProcessor.CoreTest do
     Enum.map(in_flight_exit_events, &build_in_flight_exit/1)
   end
 
+  deffixture in_flight_exits_challenges_events(in_flight_exits, competing_transactions) do
+    [{tx1_hash, _}, {tx2_hash, _}] = in_flight_exits
+    [competing_tx1, competing_tx2] = competing_transactions
+
+    [
+      %{
+        tx_hash: tx1_hash,
+        competitor_position: not_included_competitor_pos(),
+        call_data: %{
+          competing_tx: Transaction.encode(competing_tx1),
+          competing_tx_input_index: 1,
+          competing_tx_sig: <<0::520>>
+        }
+      },
+      %{
+        tx_hash: tx2_hash,
+        competitor_position: not_included_competitor_pos(),
+        call_data: %{
+          competing_tx: Transaction.encode(competing_tx2),
+          competing_tx_input_index: 2,
+          competing_tx_sig: <<1::520>>
+        }
+      }
+    ]
+  end
+
   deffixture processor_filled(processor_empty, exit_events, contract_statuses, in_flight_exit_events) do
     {state, _} = Core.new_exits(processor_empty, exit_events, contract_statuses)
     {state, _} = Core.new_in_flight_exits(state, in_flight_exit_events)
@@ -151,6 +203,16 @@ defmodule OMG.Watcher.ExitProcessor.CoreTest do
     }
 
     {Transaction.hash(raw_tx), %InFlightExitInfo{tx: signed_tx, timestamp: timestamp}}
+  end
+
+  defp build_competitor(%{
+         call_data: %{
+           competing_tx: tx_bytes,
+           competing_tx_input_index: input_index,
+           competing_tx_sig: signature
+         }
+       }) do
+    CompetitorInfo.build_competitor(tx_bytes, input_index, signature)
   end
 
   @tag fixtures: [:processor_empty, :exit_events, :contract_statuses]
@@ -170,7 +232,7 @@ defmodule OMG.Watcher.ExitProcessor.CoreTest do
     assert {^final_state, ^update2} =
              Core.new_exits(state2, Enum.slice(events, 1, 1), Enum.slice(contract_statuses, 1, 1))
 
-    {:ok, ^final_state} = Core.init(Enum.zip([@update_key1, @update_key2], values), [])
+    {:ok, ^final_state} = Core.init(Enum.zip([@update_key1, @update_key2], values), [], [])
   end
 
   @tag fixtures: [:processor_empty, :alice, :events, :tokens]
@@ -382,7 +444,6 @@ defmodule OMG.Watcher.ExitProcessor.CoreTest do
     assert ifes |> Map.new() == Core.get_in_flight_exits(updated_state)
   end
 
-  @tag :current
   @tag fixtures: [:processor_empty, :in_flight_exit_events, :in_flight_exits]
   test "persists in flight exits and loads persisted on init", %{
     processor_empty: empty,
@@ -399,8 +460,17 @@ defmodule OMG.Watcher.ExitProcessor.CoreTest do
 
     assert {^final_state, ^update2} = Core.new_in_flight_exits(updated_state, Enum.slice(events, 1, 1))
 
-    {:ok, ^final_state} = Core.init([], ifes)
+    {:ok, ^final_state} = Core.init([], ifes, [])
   end
+
+  #  #TODO
+  #  @tag fixtures: [:processor_empty, :alice, :in_flight_exit_events]
+  #  test "active piggybacks from inputs are monitored", %{
+  #    processor_empty: empty,
+  #    in_flight_exit_events: ife_events
+  #  } do
+  #    Core.new_in_flight_exits(empty, [timestamp: 1001], ife_events)
+  #  end
 
   @tag fixtures: [:processor_filled, :in_flight_exits]
   test "persists new piggybacks", %{processor_filled: state, in_flight_exits: ifes} do
@@ -431,5 +501,71 @@ defmodule OMG.Watcher.ExitProcessor.CoreTest do
     # cannot piggyback twice the same output
     {updated_state, [_]} = Core.new_piggybacks(state, [{ife_id, 0}])
     {^updated_state, []} = Core.new_piggybacks(updated_state, [{ife_id, 0}])
+  end
+
+  @tag fixtures: [:processor_filled, :in_flight_exits_challenges_events]
+  test "persists new competitors and loads persisted on init", %{
+    processor_filled: state,
+    in_flight_exits_challenges_events: challenges_events
+  } do
+    competitors = challenges_events |> Enum.map(&build_competitor/1)
+    updates = Enum.map(competitors, &CompetitorInfo.make_db_update/1)
+
+    {updated_state, db_updates} = Core.challenge_in_flight_exits(state, Enum.slice(challenges_events, 0, 1))
+
+    assert Enum.member?(db_updates, Enum.at(updates, 0))
+
+    {final_state, db_updates} = Core.challenge_in_flight_exits(state, challenges_events)
+
+    assert Enum.reduce(updates, true, fn
+             update, true -> Enum.member?(db_updates, update)
+             _, false -> false
+           end)
+
+    assert {^final_state, db_updates} =
+             Core.challenge_in_flight_exits(updated_state, Enum.slice(challenges_events, 1, 2))
+
+    assert Enum.reduce(Enum.slice(updates, 1, 2), true, fn
+             update, true -> Enum.member?(db_updates, update)
+             _, false -> false
+           end)
+
+    {:ok, ^final_state} = Core.init([], [], [])
+  end
+
+  test "new competitors sanity checks" do
+  end
+
+  #  @tag fixtures: [:processor_empty, :in_flight_exits, :in_flight_exits_challenges_events]
+  #  test "can challenge an in flight exit", %{
+  #    processor_empty: empty,
+  #    in_flight_exits: ifes_events,
+  #    in_flight_exits_challenges_events: challenges_events
+  #  } do
+  #    #    {state, _} = Core.new_in_flight_exits(empty, ifes_events)
+  #    #
+  #    #
+  #    #
+  #  end
+
+  test "challenged in flight exits are not forgotten" do
+  end
+
+  test "can challenge in flight exit with an in flight transaction" do
+  end
+
+  test "can challenge in flight exit with a canonical transaction" do
+  end
+
+  test "can challenge in flight exit twice" do
+  end
+
+  test "in flight exits are found by competitor finder" do
+  end
+
+  test "competitors are found by competitor finder" do
+  end
+
+  test "forgets challenged piggybacks" do
   end
 end

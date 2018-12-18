@@ -20,23 +20,34 @@ defmodule OMG.Watcher.ExitProcessor.CompetitorInfo do
   """
 
   alias OMG.API.Crypto
-  alias OMG.API.Utxo
+  alias OMG.API.State.Transaction
 
-  # mapped by :in_flight_exit_id
+  # mapped by tx_hash
   defstruct [
-    :competing_in_flight_tx,
-    :tx_bytes,
-    :inclusion_proof,
+    :tx,
+    # TODO: what if someone does challenges once more but with another input?
     :competing_input_index,
     :competing_input_signature
   ]
 
-  # TODO
-  #  @type t :: %__MODULE__{
-  #               competing_in_flight_tx: ,
-  #               :tx_bytes,
-  #               :inclusion_proof,
-  #               :competing_input_index,
-  #               :competing_input_signature
-  #             }
+  @type t :: %__MODULE__{
+          tx: Transaction.t(),
+          competing_input_index: 1..4,
+          competing_input_signature: Crypto.sig_t()
+        }
+
+  def make_db_update({_tx_hash, %__MODULE__{} = _competitor} = update) do
+    {:put, :competitor_info, update}
+  end
+
+  def build_competitor(tx_bytes, competing_input_index, competing_input_signature) do
+    with {:ok, raw_tx, []} <- Transaction.decode(tx_bytes) do
+      {Transaction.hash(raw_tx),
+       struct(__MODULE__,
+         rx: raw_tx,
+         competing_input_index: competing_input_index,
+         competing_input_signature: competing_input_index
+       )}
+    end
+  end
 end

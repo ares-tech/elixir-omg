@@ -75,6 +75,15 @@ defmodule OMG.Watcher.ExitProcessor do
   end
 
   @doc """
+  Accepts events and processes them in the state.
+  Competitors are stored for future use(i.e. to challenge an in flight exit).
+  Returns `db_updates` due and relies on the caller to do persistence
+  """
+  def challenge_in_flight_exits(challenges) do
+    GenServer.call(__MODULE__, {:challenge_in_flight_exit, challenges})
+  end
+
+  @doc """
   Checks validity and causes event emission to `OMG.Watcher.Eventer`. Works with `OMG.API.State` to discern validity
   """
   def check_validity do
@@ -97,12 +106,14 @@ defmodule OMG.Watcher.ExitProcessor do
   def init(:ok) do
     {:ok, db_exits} = DB.exit_infos()
     {:ok, db_ifes} = DB.in_flight_exits_info()
+    {:ok, db_competitors} = DB.competitors_info()
+
     sla_margin = Application.fetch_env!(:omg_watcher, :exit_processor_sla_margin)
     interval = Application.fetch_env!(:omg_watcher, :exit_processor_validation_interval_ms)
 
     {:ok, _} = :timer.send_interval(interval, self(), :check_validity)
 
-    Core.init(db_exits, db_ifes, sla_margin)
+    Core.init(db_exits, db_ifes, db_competitors, sla_margin)
   end
 
   def handle_call({:new_exits, exits}, _from, state) do
@@ -138,6 +149,11 @@ defmodule OMG.Watcher.ExitProcessor do
 
   def handle_call({:challenge_exits, exits}, _from, state) do
     {new_state, db_updates} = Core.challenge_exits(state, exits)
+    {:reply, {:ok, db_updates}, new_state}
+  end
+
+  def handle_call({:challange_in_flight_exits, challenges}, _from, state) do
+    {new_state, db_updates} = Core.challenge_in_flight_exits(state, challenges)
     {:reply, {:ok, db_updates}, new_state}
   end
 

@@ -266,6 +266,22 @@ defmodule OMG.Eth.RootChain do
          do: {:ok, Enum.map(logs, &decode_exit_challenged/1)}
   end
 
+  @doc """
+    Returns challenges of in flight exits from a range of blocks from Ethereum logs.
+  """
+  def get_in_flight_exit_challenges(block_from, block_to, contract \\ nil) do
+    contract = contract || from_hex(Application.fetch_env!(:omg_eth, :contract_addr))
+    signature = "InFlightExitChallenged(address,bytes32,uint256)"
+
+    with {:ok, logs} <- Eth.get_ethereum_events(block_from, block_to, signature, contract),
+         do:
+           {:ok,
+            Enum.map(logs, fn log ->
+              decode_in_flight_exit_challenged(log)
+              |> Map.put(:call_data, get_in_flight_exit_challenged_data(log["transactionHash"]))
+            end)}
+  end
+
   defp decode_deposit(log) do
     non_indexed_keys = [:amount]
     non_indexed_key_types = [{:uint, 256}]
@@ -296,16 +312,24 @@ defmodule OMG.Eth.RootChain do
     {:ok, eth_tx} = Ethereumex.HttpClient.eth_get_transaction_by_hash(hash)
     {:ok, eth_block} = Ethereumex.HttpClient.eth_get_block_by_number(eth_tx["blockHash"], false)
 
-    #    ABI.decode(
-    #      %ABI.FunctionSelector{
-    #        function: "startInFlightExit",
-    #        types: [:bytes, :bytes, :bytes, :bytes],
-    #        method_id: <<132, 97, 33, 149>>
-    #      },
-    #      from_hex(eth_tx["input"])
+    ABI.decode(
+      %ABI.FunctionSelector{
+        function: "startInFlightExit",
+        types: [:bytes, :bytes, :bytes, :bytes],
+        method_id: <<132, 97, 33, 149>>
+      },
+      from_hex(eth_tx["input"])
+    )
+    |> (&Enum.zip([:tx_bytes, :intput_txs, :inputs_inclusion_proofs, :signatures], &1)).()
+    |> Map.new()
+
+    #    Eth.get_call_data(
+    #      hash,
+    #      "startInFlightExit",
+    #      [:tx_bytes, :intput_txs, :inputs_inclusion_proofs, :signatures],
+    #      List.duplicate(:bytes, 4)
     #    )
-    #    |> (&Enum.zip([:tx_bytes, :intput_txs, :inputs_inclusion_proofs, :signatures], &1)).()
-    #    |> Map.new()
+
     Map.new()
     |> Map.drop([:intput_txs, :inputs_inclusion_proofs])
     |> Map.put(:timestamp, from_hex(eth_block["timestamp"]))
@@ -338,8 +362,39 @@ defmodule OMG.Eth.RootChain do
   end
 
   defp decode_exit_challenged(log) do
-    # faux-DRY - just leveraging that these events happen to have exactly the same fields/indexings, in current impl.
+    # faux-DRY - just leveraging that these events happen to have exactly the same fields/indices, in current impl.
     decode_exit_finalized(log)
+  end
+
+  defp decode_in_flight_exit_challenged(log) do
+    non_indexed_keys = [:tx_hash, :competitor_position]
+    non_indexed_key_types = [{:byte, 32}, {:uint, 256}]
+    indexed_keys = [:challenger]
+    indexed_keys_types = [:address]
+
+    Eth.parse_events_with_indexed_fields(
+      log,
+      {non_indexed_keys, non_indexed_key_types},
+      {indexed_keys, indexed_keys_types}
+    )
+  end
+
+  defp get_in_flight_exit_challenged_data(hash) do
+    Eth.get_call_data(
+      hash,
+      "challengeInFlightExitNotCanonical",
+      [
+        :in_flight_tx,
+        :in_flight_input_index,
+        :competing_tx,
+        :competing_tx_input_index,
+        :competing_tx_id,
+        :competing_tx_inclusion_proof,
+        :competing_tx_sig
+      ],
+      [:bytes, {:uint, 8}, :bytes, {:uint, 8}, {:uint, 256}, :bytes, :bytes]
+    )
+    |> Map.drop([:in_flight_tx, :in_flight_input_index, :competing_tx_id, :competing_tx_inclusion_proof])
   end
 
   ########################

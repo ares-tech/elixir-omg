@@ -76,12 +76,12 @@ defmodule OMG.DB.LevelDBServer do
   end
 
   def handle_call({:utxos}, _from, %__MODULE__{db_ref: db_ref} = state) do
-    result  = get_by_type(:utxo, db_ref)
+    result = get_by_type(:utxo, db_ref)
     {:reply, result, state}
   end
 
   def handle_call({:exit_infos}, _from, %__MODULE__{db_ref: db_ref} = state) do
-    result  = get_by_type(:exit_info, db_ref)
+    result = get_by_type(:exit_info, db_ref)
     {:reply, result, state}
   end
 
@@ -101,7 +101,7 @@ defmodule OMG.DB.LevelDBServer do
   end
 
   def handle_call({:competitors_info}, _from, %__MODULE__{db_ref: db_ref} = state) do
-    result  = get_by_type(:competitor_info, db_ref)
+    result = get_by_type(:competitor_info, db_ref)
     {:reply, result, state}
   end
 
@@ -138,5 +138,4 @@ defmodule OMG.DB.LevelDBServer do
     |> Enum.map(fn {_, value} -> {:ok, value} end)
     |> LevelDBCore.decode_values(type)
   end
-
 end
