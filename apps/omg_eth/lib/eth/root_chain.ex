@@ -54,7 +54,7 @@ defmodule OMG.Eth.RootChain do
     )
   end
 
-  def start_exit(outputId, txbytes, proof, from, contract \\ nil, opts \\ []) do
+  def start_exit(output_id, tx_bytes, proof, from, contract \\ nil, opts \\ []) do
     defaults =
       @tx_defaults
       |> Keyword.put(:gas, @gas_start_exit)
@@ -68,7 +68,7 @@ defmodule OMG.Eth.RootChain do
       from,
       contract,
       "startStandardExit(uint192,bytes,bytes)",
-      [outputId, txbytes, proof],
+      [output_id, tx_bytes, proof],
       opts
     )
   end
@@ -168,7 +168,29 @@ defmodule OMG.Eth.RootChain do
 
   def get_standard_exit_id(utxo_pos, contract \\ nil) do
     contract = contract || from_hex(Application.fetch_env!(:omg_eth, :contract_addr))
-    Eth.call_contract(contract, "getStandardExitId(uint256)", [utxo_pos], [{:uint, 256}])
+    Eth.call_contract(contract, "getStandardExitId(uint256)", [utxo_pos], [{:uint, 192}])
+  end
+
+  @doc """
+  Returns in flight exit for a specific id. Calls contract method.
+  """
+  def get_in_flight_exit(in_flight_exit_id, contract \\ nil) do
+    contract = contract || from_hex(Application.fetch_env!(:omg_eth, :contract_addr))
+
+    # solidity does not return arrays of structs
+    return_struct = [
+      {:uint, 256},
+      {:uint, 256},
+      :address,
+      {:uint, 256}
+    ]
+
+    Eth.call_contract(contract, "inFlightExits(uint192)", [in_flight_exit_id], return_struct)
+  end
+
+  def get_in_flight_exit_id(tx_bytes, contract \\ nil) do
+    contract = contract || from_hex(Application.fetch_env!(:omg_eth, :contract_addr))
+    Eth.call_contract(contract, "getInFlightExitId(bytes)", [tx_bytes], [{:uint, 192}])
   end
 
   def get_child_chain(blknum, contract \\ nil) do
@@ -312,27 +334,10 @@ defmodule OMG.Eth.RootChain do
     {:ok, eth_tx} = Ethereumex.HttpClient.eth_get_transaction_by_hash(hash)
     {:ok, eth_block} = Ethereumex.HttpClient.eth_get_block_by_number(eth_tx["blockHash"], false)
 
-    ABI.decode(
-      %ABI.FunctionSelector{
-        function: "startInFlightExit",
-        types: [:bytes, :bytes, :bytes, :bytes],
-        method_id: <<132, 97, 33, 149>>
-      },
-      from_hex(eth_tx["input"])
-    )
-    |> (&Enum.zip([:tx_bytes, :intput_txs, :inputs_inclusion_proofs, :signatures], &1)).()
-    |> Map.new()
+    [bytes, _input_txs, _inputs_inclusion_proofs, signatures] =
+      Eth.get_call_data(hash, "startInFlightExit(bytes,bytes,bytes,bytes)")
 
-    #    Eth.get_call_data(
-    #      hash,
-    #      "startInFlightExit",
-    #      [:tx_bytes, :intput_txs, :inputs_inclusion_proofs, :signatures],
-    #      List.duplicate(:bytes, 4)
-    #    )
-
-    Map.new()
-    |> Map.drop([:intput_txs, :inputs_inclusion_proofs])
-    |> Map.put(:timestamp, from_hex(eth_block["timestamp"]))
+    %{tx_bytes: bytes, signatures: signatures, timestamp: from_hex(eth_block["timestamp"])}
   end
 
   defp decode_exit_finalized(log) do
@@ -380,21 +385,21 @@ defmodule OMG.Eth.RootChain do
   end
 
   defp get_in_flight_exit_challenged_data(hash) do
-    Eth.get_call_data(
-      hash,
-      "challengeInFlightExitNotCanonical",
-      [
-        :in_flight_tx,
-        :in_flight_input_index,
-        :competing_tx,
-        :competing_tx_input_index,
-        :competing_tx_id,
-        :competing_tx_inclusion_proof,
-        :competing_tx_sig
-      ],
-      [:bytes, {:uint, 8}, :bytes, {:uint, 8}, {:uint, 256}, :bytes, :bytes]
-    )
-    |> Map.drop([:in_flight_tx, :in_flight_input_index, :competing_tx_id, :competing_tx_inclusion_proof])
+    [
+      _in_flight_tx,
+      _in_flight_input_index,
+      competing_tx,
+      competing_tx_input_index,
+      _competing_tx_id,
+      _competing_tx_inclusion_proof,
+      competing_tx_sig
+    ] = Eth.get_call_data(hash, "challengeInFlightExitNotCanonical(bytes,uint8,bytes,uint8,uint256,bytes,bytes)")
+
+    %{
+      competing_tx: competing_tx,
+      competing_tx_input_index: competing_tx_input_index,
+      competing_tx_sig: competing_tx_sig
+    }
   end
 
   ########################
