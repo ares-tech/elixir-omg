@@ -213,7 +213,8 @@ defmodule OMG.Eth.RootChain do
   def get_deposits(block_from, block_to, contract \\ nil) do
     contract = contract || from_hex(Application.fetch_env!(:omg_eth, :contract_addr))
 
-    with {:ok, logs} <- Eth.get_ethereum_events(block_from, block_to, "DepositCreated(address,uint256,address,uint256)", contract),
+    with {:ok, logs} <-
+           Eth.get_ethereum_events(block_from, block_to, "DepositCreated(address,uint256,address,uint256)", contract),
          do: {:ok, Enum.map(logs, &decode_deposit/1)}
   end
 
@@ -367,7 +368,7 @@ defmodule OMG.Eth.RootChain do
   end
 
   defp decode_exit_challenged(log) do
-    # faux-DRY - just leveraging that these events happen to have exactly the same fields/indices, in current impl.
+    # faux-DRY - just leveraging that these events happen to have exactly the same fields/indexings, in current impl.
     decode_exit_finalized(log)
   end
 

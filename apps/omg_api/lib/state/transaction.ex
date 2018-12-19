@@ -209,6 +209,14 @@ defmodule OMG.API.State.Transaction do
         List.duplicate([@zero_address, @zero_address, 0], 4 - length(outputs))
     ]
 
+  def decode(tx_bytes) do
+    try do
+      ExRLP.decode(tx_bytes) |> from_rlp()
+    rescue
+      _ -> {:error, :malformed_transaction_rlp}
+    end
+  end
+
   def hash(%__MODULE__{} = tx) do
     tx
     |> encode

@@ -41,42 +41,6 @@ defmodule OMG.Watcher.ExitProcessor.CoreTest do
   @update_key1 {1, 0, 0}
   @update_key2 {10, 0, 1}
 
-  deffixture processor_empty() do
-    {:ok, empty} = Core.init([])
-    empty
-  end
-
-  # events is whatever `OMG.Eth` would feed into the `OMG.Watcher.ExitProcessor`, via `OMG.API.EthereumEventListener`
-  deffixture events(alice) do
-    %{addr: alice} = alice
-
-    [
-      %{amount: 10, currency: @eth, owner: alice, utxo_pos: Utxo.Position.encode(@utxo_pos1), eth_height: 2},
-      %{amount: 9, currency: @not_eth, owner: alice, utxo_pos: Utxo.Position.encode(@utxo_pos2), eth_height: 4}
-    ]
-  end
-
-  # extracts the mocked responses of the `Eth.RootChain.get_exit` for the exit events
-  # all exits active (owner non-zero). This is the auxiliary, second argument that's fed into `new_exits`
-  deffixture contract_statuses(events) do
-    events
-    |> Enum.map(fn %{amount: amount, currency: currency, owner: owner} -> {owner, currency, amount} end)
-  end
-
-  deffixture processor_filled(processor_empty, events, contract_statuses) do
-    {state, _} = Core.new_exits(processor_empty, events, contract_statuses)
-    state
-  end
-
-  @tag fixtures: [:processor_empty, :alice, :events, :contract_statuses]
-  require Utxo
-
-  @eth Crypto.zero_address()
-  @not_eth <<1::size(160)>>
-
-  @utxo_pos1 Utxo.position(1, 0, 0)
-  @utxo_pos2 Utxo.Position.decode(10_000_000_001)
-
   defp not_included_competitor_pos do
     <<long::256>> = List.duplicate(<<255::8>>, 32) |> Enum.reduce(fn val, acc -> val <> acc end)
     long
@@ -195,7 +159,7 @@ defmodule OMG.Watcher.ExitProcessor.CoreTest do
   end
 
   defp build_in_flight_exit(%{tx_bytes: bytes, signatures: signs, timestamp: timestamp}) do
-    {:ok, raw_tx, []} = Transaction.decode(bytes)
+    {:ok, raw_tx} = Transaction.decode(bytes)
 
     signed_tx = %Transaction.Signed{
       raw_tx: raw_tx,
@@ -235,7 +199,7 @@ defmodule OMG.Watcher.ExitProcessor.CoreTest do
     {:ok, ^final_state} = Core.init(Enum.zip([@update_key1, @update_key2], values), [], [])
   end
 
-  @tag fixtures: [:processor_empty, :alice, :events, :tokens]
+  @tag fixtures: [:processor_empty, :alice, :exit_events]
   test "new_exits sanity checks", %{
     processor_empty: processor,
     alice: %{addr: alice},
@@ -530,7 +494,7 @@ defmodule OMG.Watcher.ExitProcessor.CoreTest do
              _, false -> false
            end)
 
-    {:ok, ^final_state} = Core.init([], [], [])
+#    {:ok, ^final_state} = Core.init([], [], [])
   end
 
   test "new competitors sanity checks" do

@@ -27,7 +27,6 @@ defmodule OMG.API.Core do
           :bad_signature_length
           | :duplicate_inputs
           | :malformed_transaction
-          | :malformed_signed_transaction
           | :malformed_transaction_rlp
           | :no_inputs
           | :signature_corrupt
