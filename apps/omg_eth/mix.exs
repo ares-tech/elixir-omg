@@ -40,7 +40,7 @@ defmodule OMG.Eth.MixProject do
       {:briefly, "~> 0.3"},
       {
         :plasma_contracts,
-        git: "https://github.com/omisego/plasma-contracts",
+        github: "https://github.com/omisego/plasma-contracts",
         branch: "v0.0.1",
         sparse: "contracts/",
         compile: contracts_compile(),
