@@ -51,6 +51,11 @@ defmodule OMG.DB do
     GenServer.call(server_name, {:exit_infos}, timeout_ms)
   end
 
+  @spec spent_blknum({pos_integer, non_neg_integer, non_neg_integer}, atom) :: {:ok, pos_integer} | {:error, atom}
+  def spent_blknum(utxo_pos, server_name \\ @server_name) do
+    GenServer.call(server_name, {:spent_blknum, utxo_pos})
+  end
+
   def block_hashes(block_numbers_to_fetch, server_name \\ @server_name) do
     GenServer.call(server_name, {:block_hashes, block_numbers_to_fetch})
   end
